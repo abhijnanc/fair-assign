@@ -8,14 +8,6 @@ import math
 
 EPS = 1e-7
 
-
-
-
-
-
-
-
-
 def isFraction(value):
 
 	"""
@@ -38,7 +30,7 @@ class DependentRounding:
 	def __init__(self, weights):
 
 		"""
-		weights:	[num_clients x num_facilities] probability of assigning client i to facility j. 
+		weights:	[num_drivers x num_centers] probability of assigning driver i to center j. 
 		"""
 
 		sum_weights = np.sum(weights, axis = 1)
@@ -46,16 +38,16 @@ class DependentRounding:
 			if abs(sum_weights[i]-1)>EPS:
 				print(sum_weights[i]-1,i)
 			assert sum_weights[i] > 1 - EPS and sum_weights[i] < 1 + EPS, "Sum of weights \
-															over all facilities must sum to one."
+															over all centers must sum to one."
 
 		self.weights = weights
 
-		self.num_clients = weights.shape[0]
-		self.num_facilities = weights.shape[1]
-		self.total_nodes = self.num_clients + self.num_facilities
+		self.num_drivers = weights.shape[0]
+		self.num_centers = weights.shape[1]
+		self.total_nodes = self.num_drivers + self.num_centers
 
-		self.facilityCode = [i for i in range(self.num_facilities)]
-		self.clientCode = [i + self.num_facilities for i in range(self.num_clients)]
+		self.centerCode = [i for i in range(self.num_centers)]
+		self.driverCode = [i + self.num_centers for i in range(self.num_drivers)]
 
 		self.graph = self._buildGraph(weights)
 		self.cycle_found = False
@@ -71,11 +63,11 @@ class DependentRounding:
 
 		graph = [[] for i in range(self.total_nodes)]
 
-		for i in range(self.num_clients):
-			for j in range(self.num_facilities):
+		for i in range(self.num_drivers):
+			for j in range(self.num_centers):
 				if(isFraction(weights[i][j])):
-					graph[self.clientCode[i]].append(self.facilityCode[j])
-					graph[self.facilityCode[j]].append(self.clientCode[i])
+					graph[self.driverCode[i]].append(self.centerCode[j])
+					graph[self.centerCode[j]].append(self.driverCode[i])
 
 		# Maintain neighbours in a set for fast removal when edge becomes integral.
 		for i in range(self.total_nodes):
@@ -86,28 +78,28 @@ class DependentRounding:
 	def _decompose(self, edge):
 
 		"""
-		Decompose an edge to client and facility component.
+		Decompose an edge to driver and center component.
 		"""
 
 		assert len(edge) == 2, "Invalid edge"
 
-		if(edge[0] < self.num_facilities):
-			facility = edge[0]
-			client = edge[1] - self.num_facilities
+		if(edge[0] < self.num_centers):
+			center = edge[0]
+			driver = edge[1] - self.num_centers
 		else:
-			facility = edge[1]
-			client = edge[0] - self.num_facilities
+			center = edge[1]
+			driver = edge[0] - self.num_centers
 
-		assert client >= 0 and facility >= 0, "Invalid encoding found"
-		assert client < self.num_clients and facility < self.num_facilities, "Invalid encoding found"
+		assert driver >= 0 and center >= 0, "Invalid encoding found"
+		assert driver < self.num_drivers and center < self.num_centers, "Invalid encoding found"
 
-		return client, facility
+		return driver, center
 
 	def _rebalance(self, edges):
 
 		"""
 		Rebalance edges in the cycle or a maximal path.
-		It is guaranteed that there are even number of edges starting and ending at a facility.
+		It is guaranteed that there are even number of edges starting and ending at a center.
 		"""
 
 		assert len(edges) % 2 == 0, "Rebalancing doesn't work on odd set of edges"
@@ -117,8 +109,8 @@ class DependentRounding:
 
 		for i in range(len(edges)):
 
-			client, facility = self._decompose(edges[i])
-			w = self.weights[client][facility]
+			driver, center = self._decompose(edges[i])
+			w = self.weights[driver][center]
 			if(i % 2 == 0):
 				alpha = min(alpha, 1 - w)
 				beta = min(beta, w)
@@ -139,30 +131,30 @@ class DependentRounding:
 			edges.insert(0, last)
 
 		for i in range(len(edges)):
-			client, facility = self._decompose(edges[i])
+			driver, center = self._decompose(edges[i])
 			# Add to edge
 			if(i % 2 == 0):
-				self.weights[client][facility] += to_add
+				self.weights[driver][center] += to_add
 			# Subtract from edge
 			else:
-				self.weights[client][facility] -= to_add
+				self.weights[driver][center] -= to_add
 
-			assert self.weights[client][facility] >= -EPS \
-						and self.weights[client][facility] <= 1 + EPS, "Weight is out of bounds"
+			assert self.weights[driver][center] >= -EPS \
+						and self.weights[driver][center] <= 1 + EPS, "Weight is out of bounds"
 
 		# Remove integral edges from the graph
 		for i in range(len(edges)):
-			client, facility = self._decompose(edges[i])
+			driver, center = self._decompose(edges[i])
 
-			if(isNotFraction(self.weights[client][facility])):
+			if(isNotFraction(self.weights[driver][center])):
 				
-				assert self.facilityCode[facility] in self.graph[self.clientCode[client]], \
-																	"Facility not found in graph"
-				assert self.clientCode[client] in self.graph[self.facilityCode[facility]], \
-																	"Client not found in graph"
+				assert self.centerCode[center] in self.graph[self.driverCode[driver]], \
+																	"center not found in graph"
+				assert self.driverCode[driver] in self.graph[self.centerCode[center]], \
+																	"driver not found in graph"
 
-				self.graph[self.clientCode[client]].remove(self.facilityCode[facility])
-				self.graph[self.facilityCode[facility]].remove(self.clientCode[client])
+				self.graph[self.driverCode[driver]].remove(self.centerCode[center])
+				self.graph[self.centerCode[center]].remove(self.driverCode[driver])
 
 
 	def _cycle_cancel(self, node, par = -1, visited = None, dfs_stack = []):
@@ -174,8 +166,8 @@ class DependentRounding:
 		Probability of picking the alpha chain: beta / (alpha + beta)
 		Probability of picking the beta chain: alpha / (alpha + beta)
 		node 			: 	Node that is currently being processed.
-		visited			: 	Set of facilities visited so far
-		dfs_stack		: 	A set alternating between clients and facilities in the bipartite graph
+		visited			: 	Set of centers visited so far
+		dfs_stack		: 	A set alternating between drivers and centers in the bipartite graph
 							denoting the current dfs stack.
 		"""
 
@@ -222,8 +214,8 @@ class DependentRounding:
 		Probability of picking the alpha chain: beta / (alpha + beta)
 		Probability of picking the beta chain: alpha / (alpha + beta)
 		node 			: 	Node that is currently being processed.
-		visited			: 	Set of facilities visited so far
-		dfs_stack		: 	A set alternating between clients and facilities in the bipartite graph
+		visited			: 	Set of centers visited so far
+		dfs_stack		: 	A set alternating between drivers and centers in the bipartite graph
 							denoting the current dfs stack.
 		"""
 
@@ -259,17 +251,17 @@ class DependentRounding:
 
 		"""
 		Rounds the fractional weights such that the rounded values follow the distribution 
-		specified in weights, with capacities (sum of clients over a facility) lower or upper 
+		specified in weights, with capacities (sum of drivers over a center) lower or upper 
 		rounded to the nearest integer.
 		"""
 
 		capacities = np.sum(self.weights, axis = 0)
 
 		# Cancel all the cycles in the graph
-		for i in range(self.num_facilities):
+		for i in range(self.num_centers):
 
 			# Keep cancelling cycles as long as they exist
-			while(self._cycle_cancel(self.facilityCode[i])):
+			while(self._cycle_cancel(self.centerCode[i])):
 				# This state needs to be reset for each cycle finding iteration.
 				self.cycle_found = False
 
@@ -278,23 +270,23 @@ class DependentRounding:
 		while(more_maximal_paths_exist):
 			
 			more_maximal_paths_exist = False
-			# A maximal path starts in a facility with degree = 1
-			for i in range(self.num_facilities):
+			# A maximal path starts in a center with degree = 1
+			for i in range(self.num_centers):
 				if(len(self.graph[i]) == 1):
-					self._maximal_path_cancel(self.facilityCode[i])
+					self._maximal_path_cancel(self.centerCode[i])
 					self.maximal_path_found = False
 					more_maximal_paths_exist = True
 					break
 
 		# Assert that all the weights are integral
-		for i in range(self.num_clients):
-			for j in range(self.num_facilities):
+		for i in range(self.num_drivers):
+			for j in range(self.num_centers):
 				assert isNotFraction(self.weights[i][j]), "Rounding failed, integer weights remain"
 
-		# Assert that the assignments to a facility is at least floor of its capacity and at most
+		# Assert that the assignments to a center is at least floor of its capacity and at most
 		# ceil of its capacity
 		rebalanced_capacities = np.sum(self.weights, axis = 0)
-		for i in range(self.num_facilities):
+		for i in range(self.num_centers):
 			if not (math.floor(capacities[i]) <= rebalanced_capacities[i] + EPS and rebalanced_capacities[i] - EPS <= math.ceil(capacities[i]) ):
 				print(i,rebalanced_capacities[i],capacities[i], math.floor(capacities[i]),math.ceil(capacities[i]))
 			assert math.floor(capacities[i]) <= rebalanced_capacities[i] + EPS \

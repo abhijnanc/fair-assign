@@ -103,13 +103,9 @@ def prepare_to_add_variables(dataset, centres):
 
 
 
-def prepare_to_add_constraints(dataset, centres, upper_cap, lower_cap, P, C, cons, fair_distance, fairness_type = 0):
+def prepare_to_add_constraints(dataset, centres, upper_cap, lower_cap, P, C, cons, fair_distance):
 
   
-  # # Build ball_tree for kNN queries
-  # knn = NearestNeighbors(n_neighbors = n_neighbours + 1, algorithm = "ball_tree").fit(dataset)	# One more than n_neighbours as query point itself is a neighbour which is ignored
-  # _, neighbours = knn.kneighbors(dataset)
-  # neighbours = neighbours[:, 1:]			# Remove the first nearest neighbour which is itself
   num_samples = len(dataset)
   num_centres = len(centres)
 
@@ -152,7 +148,6 @@ def prepare_to_add_constraints(dataset, centres, upper_cap, lower_cap, P, C, con
 
     eqn_id+=1
 
-  print("Const 3",eqn_id)
   
 
 
@@ -171,7 +166,6 @@ def prepare_to_add_constraints(dataset, centres, upper_cap, lower_cap, P, C, con
 
 
 
-  print("Const 4",eqn_id)
   
   # Constraint type 4: Lower and upper bound the abs values using their corresponding C variables
   for _point1 in range(num_samples):
@@ -209,7 +203,8 @@ def prepare_to_add_constraints(dataset, centres, upper_cap, lower_cap, P, C, con
         coefficients.append((eqn_id, int(C[_point1][_point2][centre]), 1))
 
         eqn_id += 1
-  print("Const 5",eqn_id)
+
+
 
 	# Constraint type 5: Add fairness constraints in terms of C variables - trick to make mod constraints linear
   for _point1 in range(num_samples):
@@ -227,7 +222,6 @@ def prepare_to_add_constraints(dataset, centres, upper_cap, lower_cap, P, C, con
           coefficients.append((eqn_id, int(C[_point1][_point2][centre]), 1))
 
         eqn_id += 1
-  print("Const 6",eqn_id)
 
   
 
